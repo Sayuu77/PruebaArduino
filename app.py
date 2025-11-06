@@ -3,41 +3,67 @@ import streamlit as st
 import base64
 from openai import OpenAI
 import openai
-from PIL import Image
+from PIL import Image, ImageDraw
 import io
 
 # Function to encode the image to base64
 def encode_image(image_file):
     return base64.b64encode(image_file.getvalue()).decode("utf-8")
 
-st.set_page_config(page_title="Analizador de Colores", layout="centered", initial_sidebar_state="collapsed")
+# Function to add guide rectangle to image
+def add_guide_rectangle(image):
+    """Add a guide rectangle to show where to place the object"""
+    img = image.copy()
+    draw = ImageDraw.Draw(img)
+    
+    # Calculate rectangle dimensions (60% of image size, centered)
+    width, height = img.size
+    rect_width = int(width * 0.6)
+    rect_height = int(height * 0.6)
+    x1 = (width - rect_width) // 2
+    y1 = (height - rect_height) // 2
+    x2 = x1 + rect_width
+    y2 = y1 + rect_height
+    
+    # Draw rectangle
+    draw.rectangle([x1, y1, x2, y2], outline="red", width=3)
+    
+    # Add text
+    draw.text((x1 + 10, y1 - 25), "COLOCA EL OBJETO AQUÍ", fill="red")
+    
+    return img
+
+st.set_page_config(page_title="Analizador de Colores de Objetos", layout="centered", initial_sidebar_state="collapsed")
 
 # Streamlit page setup
-st.title("Analizador de Colores por Cámara:🎨📷")
+st.title("Analizador de Colores de Objetos:🎨📦")
 
-# Logo de la aplicación (opcional - si no tienes la imagen, comenta esta línea)
 try:
     image = Image.open('OIG4.jpg')
     st.image(image, width=350)
 except:
-    st.markdown("### 🎨 Analizador de Colores Profesional")
+    st.markdown("### 🎨 Analizador de Colores de Objetos")
 
 with st.sidebar:
-    st.subheader("Este Agente analiza los colores de imágenes capturadas por cámara.")
+    st.subheader("Analiza exclusivamente colores de objetos")
     st.markdown("""
+    **Instrucciones:**
+    1. Coloca el objeto en el cuadro rojo
+    2. Evita incluir personas en la foto
+    3. Usa fondo neutro para mejor resultado
+    4. Buena iluminación sin sombras
+    
     **Funcionalidades:**
-    - Captura imágenes con la cámara
-    - Analiza paleta de colores
-    - Identifica colores dominantes
+    - Detecta colores de objetos
     - Proporciona códigos HEX y RGB
     - Sugiere combinaciones armónicas
+    - Análisis técnico de colores
     """)
 
 ke = st.text_input('Ingresa tu Clave de OpenAI', type="password")
 if ke:
     os.environ['OPENAI_API_KEY'] = ke
 
-# Initialize the OpenAI client with the API key
 api_key = os.environ.get('OPENAI_API_KEY')
 
 # Image source selection
@@ -46,158 +72,176 @@ image_source = st.radio("Selecciona la fuente de la imagen:",
                         horizontal=True)
 
 uploaded_file = None
+guide_image = None
 
 if image_source == "Cámara Web":
     st.subheader("📸 Captura desde Cámara")
-    st.info("Usa la cámara integrada para tomar una foto")
+    
+    # Mostrar imagen de guía primero
+    st.info("🔴 Coloca el objeto en el área central de la cámara")
+    
+    # Crear imagen de guía temporal
+    guide_img = Image.new('RGB', (400, 300), color='white')
+    guide_img_with_rect = add_guide_rectangle(guide_img)
+    st.image(guide_img_with_rect, caption="Guía de posicionamiento", use_container_width=False)
     
     # Usar la cámara nativa de Streamlit
-    captured_image = st.camera_input("Toma una foto para analizar los colores")
+    captured_image = st.camera_input("Toma una foto del objeto")
     
     if captured_image is not None:
         uploaded_file = captured_image
-        st.success("¡Foto capturada exitosamente! Ahora haz clic en 'Analizar Colores'")
+        # Mostrar la imagen capturada con el cuadro guía
+        pil_image = Image.open(captured_image)
+        guide_image = add_guide_rectangle(pil_image)
+        st.image(guide_image, caption="Tu objeto - Área de análisis marcada", use_container_width=True)
+        st.success("¡Foto capturada! Haz clic en 'Analizar Colores del Objeto'")
 
 else:
     st.subheader("📁 Subir Imagen")
-    uploaded_file = st.file_uploader("Sube una imagen", type=["jpg", "png", "jpeg"], 
-                                   help="Formatos soportados: JPG, PNG, JPEG")
+    st.info("🔴 La imagen debe mostrar principalmente el objeto, sin personas")
+    
+    uploaded_file = st.file_uploader("Sube una imagen del objeto", type=["jpg", "png", "jpeg"], 
+                                   help="Imágenes de objetos, productos, materiales, etc.")
+    
+    if uploaded_file is not None:
+        # Mostrar imagen con cuadro guía
+        pil_image = Image.open(uploaded_file)
+        guide_image = add_guide_rectangle(pil_image)
+        st.image(guide_image, caption="Tu objeto - Área de análisis marcada", use_container_width=True)
 
-if uploaded_file:
-    # Display the image
-    with st.expander("👀 Vista Previa de la Imagen", expanded=True):
-        st.image(uploaded_file, caption="Imagen para analizar", use_container_width=True)
-        
-        # Mostrar información básica de la imagen
-        try:
-            image = Image.open(uploaded_file)
-            st.write(f"**Dimensiones:** {image.size[0]} x {image.size[1]} píxeles")
-            st.write(f"**Formato:** {image.format}")
-        except:
-            pass
-
-# Tipo de análisis
+# Tipo de análisis específico para objetos
 analysis_type = st.selectbox(
     "🔍 Tipo de análisis:",
-    ["Análisis Completo", "Paleta de Colores", "Colores Dominantes", "Análisis Emocional"]
+    ["Análisis Completo del Objeto", "Paleta de Colores Principal", "Colores Exactos", "Análisis para Diseño"]
 )
 
 # Toggle for showing additional details input
-show_details = st.toggle("🎯 Personalizar análisis", value=False)
+show_details = st.toggle("🎯 Especificar tipo de objeto", value=False)
 
 if show_details:
     additional_details = st.text_area(
-        "Especifica qué aspectos del color quieres analizar:",
-        placeholder="Ej: Analizar colores dominantes, sugerir paletas armónicas, identificar colores complementarios, análisis psicológico del color...",
-        help="Cuanto más específico seas, mejor será el análisis"
+        "Describe el objeto y qué colores te interesan:",
+        placeholder="Ej: 'Una botella de plástico azul', 'Una manzana roja', 'Un tejido con patrones multicolor'...",
+        help="Describe el objeto para un análisis más preciso"
     )
 
 # Button to trigger the analysis
-analyze_button = st.button("🎨 Analizar Colores", type="primary", use_container_width=True)
+analyze_button = st.button("🎨 Analizar Colores del Objeto", type="primary", use_container_width=True)
 
 # Check if an image has been uploaded and API key is available
 if uploaded_file is not None and api_key and analyze_button:
 
-    with st.spinner("🔍 Analizando colores... Esto puede tomar unos segundos"):
+    with st.spinner("🔍 Analizando colores del objeto... Esto puede tomar unos segundos"):
         # Encode the image
         base64_image = encode_image(uploaded_file)
     
-        # Base prompt for color analysis
-        base_prompt = """Eres un experto en análisis de color, teoría del color y diseño. 
-        Analiza la imagen proporcionada y responde EXCLUSIVAMENTE en español con un análisis profesional."""
+        # Base prompt for object color analysis
+        base_prompt = """Eres un experto en análisis de color de objetos. 
+        Analiza EXCLUSIVAMENTE los colores del OBJETO en la imagen, ignorando completamente:
+        - Personas, caras o figuras humanas
+        - Fondos y entorno
+        - Elementos secundarios
+        
+        Responde EXCLUSIVAMENTE en español enfocándote solo en los colores del objeto principal."""
         
         # Customize prompt based on analysis type
-        if analysis_type == "Análisis Completo":
+        if analysis_type == "Análisis Completo del Objeto":
             prompt_text = base_prompt + """
-            Proporciona un análisis completo que incluya:
+            Proporciona un análisis completo de los colores del objeto:
 
-            ## 🎨 PALETA DE COLORES
-            - Colores dominantes con porcentajes aproximados
-            - Códigos HEX, RGB y nombres de cada color principal
-            - Paleta completa identificada
+            ## 🎨 COLORES PRINCIPALES DEL OBJETO
+            - 3-5 colores dominantes del objeto con porcentajes
+            - Códigos HEX y RGB exactos de cada color
+            - Nombres descriptivos de los colores
 
-            ## 🔍 ANÁLISIS TÉCNICO
-            - Temperatura de color (cálido/frío/neutral)
-            - Saturación y brillo general
-            - Nivel de contraste
+            ## 🔍 CARACTERÍSTICAS TÉCNICAS
+            - Temperatura de color del objeto (cálido/frío/neutral)
+            - Saturación y brillo predominantes
+            - Textura y acabado sugeridos por los colores
 
-            ## 💫 ANÁLISIS EMOCIONAL
-            - Estados de ánimo que transmite
-            - Sensaciones y emociones asociadas
-            - Contextos apropiados para esta paleta
+            ## 📊 COMPOSICIÓN CROMÁTICA
+            - Distribución de colores en el objeto
+            - Patrones o gradientes identificados
+            - Acabados (mate, brillo, transparente, etc.)
 
-            ## 💡 RECOMENDACIONES PRÁCTICAS
-            - Uso en diseño gráfico
-            - Aplicación en decoración
+            ## 💡 APLICACIONES PRÁCTICAS
+            - Usos recomendados basados en los colores
             - Combinaciones armónicas sugeridas
+            - Compatibilidad con otros materiales
 
-            Formato: Usa markdown con encabezados claros y organización profesional.
+            Formato: Usa markdown con organización clara y profesional.
             """
             
-        elif analysis_type == "Paleta de Colores":
+        elif analysis_type == "Paleta de Colores Principal":
             prompt_text = base_prompt + """
-            Enfócate específicamente en la paleta de colores:
+            Enfócate específicamente en la paleta de colores del objeto:
 
-            ## 🎨 PALETA PRINCIPAL
-            - 5-7 colores principales con códigos HEX exactos
-            - Porcentaje aproximado de cada color en la imagen
+            ## 🎨 PALETA PRINCIPAL DEL OBJETO
+            - 4-6 colores principales con códigos HEX exactos
+            - Porcentaje de cada color en el objeto
+            - Colores base y acentos
 
-            ## 🔄 VARIACIONES Y TONALIDADES
-            - Tonalidades claras y oscuras presentes
-            - Gradientes identificados
+            ## 🔄 VARIACIONES Y MATICES
+            - Diferentes tonalidades presentes
+            - Gradientes o transiciones de color
+            - Efectos visuales (metalizado, perlado, etc.)
 
-            ## ✨ COMBINACIONES SUGERIDAS
-            - 3 combinaciones armónicas con los colores identificados
-            - Esquemas de color recomendados (análogo, complementario, etc.)
+            ## ✨ COMBINACIONES RECOMENDADAS
+            - 3 combinaciones armónicas con los colores del objeto
+            - Esquemas de color que complementan el objeto
 
-            Incluye todos los códigos HEX para cada color mencionado.
+            Incluye TODOS los códigos HEX para cada color del objeto.
             """
             
-        elif analysis_type == "Colores Dominantes":
+        elif analysis_type == "Colores Exactos":
             prompt_text = base_prompt + """
-            Identifica específicamente los colores dominantes:
+            Identifica específicamente los colores exactos del objeto:
 
-            ## 🏆 TOP 5 COLORES DOMINANTES
-            - Lista ordenada por predominancia
-            - Porcentaje estimado de cada color
-            - Códigos EXACTOS (HEX, RGB)
+            ## 🎯 COLORES EXACTOS IDENTIFICADOS
+            - Lista ordenada de colores por predominancia
+            - Códigos HEX, RGB y CMYK exactos
+            - Porcentaje estimado de cada color en el objeto
 
-            ## 📊 DISTRIBUCIÓN CROMÁTICA
-            - Cómo se distribuyen los colores en la imagen
-            - Puntos focales de color
-
-            ## 🏷️ NOMENCLATURA
-            - Nombres descriptivos/comerciales de cada color
+            ## 🏷️ ESPECIFICACIONES TÉCNICAS
+            - Nombres comerciales/industriales de los colores
             - Familia cromática de cada color
+            - Valores HSL detallados
 
-            Formato: Lista o tabla clara con todos los códigos.
+            ## 📐 PRECISIÓN DE COLOR
+            - Nivel de uniformidad del color
+            - Variaciones detectadas
+            - Consistencia cromática
+
+            Formato: Lista detallada con todos los códigos técnicos.
             """
             
-        else:  # Análisis Emocional
+        else:  # Análisis para Diseño
             prompt_text = base_prompt + """
-            Enfócate en el aspecto emocional y psicológico:
+            Enfócate en aplicaciones de diseño con los colores del objeto:
 
-            ## 😊 IMPACTO EMOCIONAL
-            - Estados de ánimo que evoca la paleta
-            - Sensaciones principales transmitidas
-            - Asociaciones psicológicas de los colores
+            ## 🎨 APLICACIONES EN DISEÑO
+            - Usos en diseño de producto
+            - Aplicaciones en branding y packaging
+            - Compatibilidad con tendencias actuales
 
-            ## 🏛️ CONTEXTOS APROPIADOS
-            - Usos recomendados (branding, interiorismo, etc.)
-            - Industrias o sectores adecuados
-            - Público objetivo ideal
+            ## 🏭 USOS INDUSTRIALES
+            - Aplicaciones en manufactura
+            - Materiales sugeridos por los colores
+            - Mercados objetivo apropiados
 
-            ## 💭 MENSAJE Y COMUNICACIÓN
-            - Qué comunica esta combinación de colores
-            - Valores y atributos asociados
-            - Personalidad de la paleta
+            ## 💼 RECOMENDACIONES COMERCIALES
+            - Públicos que atraerían estos colores
+            - Contextos de uso recomendados
+            - Valor percibido del objeto por sus colores
 
-            Incluye recomendaciones específicas basadas en la psicología del color.
+            Incluye recomendaciones prácticas basadas en los colores del objeto.
             """
     
-        # Add user context if provided
+        # Add object description if provided
         if show_details and additional_details:
-            prompt_text += f"\n\nCONTEXTO ADICIONAL DEL USUARIO:\n{additional_details}"
+            prompt_text += f"\n\nDESCRIPCIÓN DEL OBJETO:\n{additional_details}"
+        else:
+            prompt_text += "\n\nSi no se proporciona descripción, analiza los colores del objeto principal visible."
     
         # Make the request to the OpenAI API
         try:
@@ -223,7 +267,7 @@ if uploaded_file is not None and api_key and analyze_button:
             # Display the response
             if response.choices[0].message.content:
                 st.markdown("---")
-                st.subheader("📊 Resultados del Análisis")
+                st.subheader("📊 Resultados del Análisis del Objeto")
                 st.markdown(response.choices[0].message.content)
     
         except Exception as e:
@@ -233,27 +277,31 @@ if uploaded_file is not None and api_key and analyze_button:
 else:
     # Warnings for user action required
     if not uploaded_file and analyze_button:
-        st.warning("⚠️ Por favor captura o sube una imagen primero.")
+        st.warning("⚠️ Por favor captura o sube una imagen del objeto primero.")
     if not api_key and analyze_button:
         st.warning("🔑 Por favor ingresa tu API key de OpenAI.")
 
-# Additional tips section
-with st.expander("💡 Consejos para un mejor análisis de color"):
+# Additional tips section for object analysis
+with st.expander("💡 Consejos para análisis de objetos"):
     st.markdown("""
-    ### 📸 Para mejores resultados:
-    - **Iluminación**: Buena luz natural o artificial uniforme
-    - **Enfoque**: Imágenes nítidas y bien enfocadas
-    - **Composición**: Enfoca el área con los colores que te interesan
-    - **Fondo**: Fondos neutros ayudan a aislar los colores principales
-    
-    ### 🎨 Tipos de imágenes ideales:
-    - Fotografías de productos o objetos
-    - Imágenes de naturaleza y paisajes
-    - Diseños gráficos y obras de arte
-    - Interiores y espacios decorados
-    
-    ### 🔧 Para análisis específicos:
-    - **Diseño**: Especifica si es para web, print, branding, etc.
-    - **Decoración**: Menciona el espacio o estilo deseado
-    - **Arte**: Indica el estilo o técnica que te interesa
+    ### 📸 Para mejores resultados con objetos:
+    - **Posicionamiento**: Coloca el objeto en el centro del cuadro rojo
+    - **Fondo**: Usa fondos neutros (blanco, gris, negro)
+    - **Iluminación**: Luz uniforme sin sombras fuertes
+    - **Enfoque**: Imagen nítida del objeto
+    - **Ángulo**: Muestra la superficie principal del objeto
+
+    ### 🚫 Qué evitar:
+    - Personas en la imagen
+    - Múltiples objetos mezclados
+    - Fondos con patrones complejos
+    - Reflexiones y brillos excesivos
+    - Sombras que distorsionen los colores
+
+    ### ✅ Objetos ideales para análisis:
+    - Productos y packaging
+    - Materiales y textiles
+    - Objetos de diseño
+    - Elementos naturales (frutas, flores, minerales)
+    - Artículos de decoración
     """)
