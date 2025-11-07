@@ -15,9 +15,9 @@ def crop_to_guide_area(image):
     """Crop image to only include the guide rectangle area"""
     width, height = image.size
     
-    # Calculate crop area (60% of image size, centered)
-    crop_width = int(width * 0.6)
-    crop_height = int(height * 0.6)
+    # Calculate crop area (70% of image size, centered)
+    crop_width = int(width * 0.7)
+    crop_height = int(height * 0.7)
     left = (width - crop_width) // 2
     top = (height - crop_height) // 2
     right = left + crop_width
@@ -27,6 +27,55 @@ def crop_to_guide_area(image):
     cropped_image = image.crop((left, top, right, bottom))
     
     return cropped_image
+
+# Function to add guide rectangle to image
+def add_guide_rectangle(image):
+    """Add a guide rectangle directly to the image"""
+    img = image.copy()
+    draw = ImageDraw.Draw(img)
+    
+    # Calculate rectangle dimensions (70% of image size, centered)
+    width, height = img.size
+    rect_width = int(width * 0.7)
+    rect_height = int(height * 0.7)
+    x1 = (width - rect_width) // 2
+    y1 = (height - rect_height) // 2
+    x2 = x1 + rect_width
+    y2 = y1 + rect_height
+    
+    # Draw thick red rectangle
+    for i in range(4):  # Multiple lines for thicker border
+        draw.rectangle([x1-i, y1-i, x2+i, y2+i], outline="red", width=1)
+    
+    # Add corner markers
+    corner_size = 25
+    # Top-left corner
+    draw.line([x1, y1, x1 + corner_size, y1], fill="red", width=4)
+    draw.line([x1, y1, x1, y1 + corner_size], fill="red", width=4)
+    # Top-right corner
+    draw.line([x2, y1, x2 - corner_size, y1], fill="red", width=4)
+    draw.line([x2, y1, x2, y1 + corner_size], fill="red", width=4)
+    # Bottom-left corner
+    draw.line([x1, y2, x1 + corner_size, y2], fill="red", width=4)
+    draw.line([x1, y2, x1, y2 - corner_size], fill="red", width=4)
+    # Bottom-right corner
+    draw.line([x2, y2, x2 - corner_size, y2], fill="red", width=4)
+    draw.line([x2, y2, x2, y2 - corner_size], fill="red", width=4)
+    
+    # Add instructional text with background
+    text = "COLOCA EL OBJETO DENTRO DEL CUADRO ROJO"
+    text_width = draw.textlength(text)
+    text_x = (width - text_width) // 2
+    text_y = y1 - 40
+    
+    # Text background
+    draw.rectangle([text_x-10, text_y-5, text_x + text_width + 10, text_y + 20], 
+                   fill="white", outline="red", width=2)
+    
+    # Text
+    draw.text((text_x, text_y), text, fill="red", stroke_width=1, stroke_fill="white")
+    
+    return img
 
 # Function to convert PIL image to bytes for upload
 def pil_to_bytes(pil_image):
@@ -38,91 +87,21 @@ def pil_to_bytes(pil_image):
 st.set_page_config(page_title="Detector de Colores Básicos", layout="centered", initial_sidebar_state="collapsed")
 
 # Streamlit page setup
-st.title("🔍 Detector de Colores: Rojo, Azul, Verde")
-
-# Custom CSS para superponer el cuadro guía en la cámara
-st.markdown("""
-<style>
-    .camera-overlay {
-        position: relative;
-        display: inline-block;
-    }
-    .camera-guide {
-        position: absolute;
-        top: 20%;
-        left: 20%;
-        width: 60%;
-        height: 60%;
-        border: 3px solid #ff0000;
-        background: transparent;
-        pointer-events: none;
-        z-index: 1000;
-    }
-    .camera-guide::before {
-        content: "COLOCA EL OBJETO AQUÍ";
-        position: absolute;
-        top: -35px;
-        left: 10px;
-        color: #ff0000;
-        font-weight: bold;
-        font-size: 14px;
-        background: white;
-        padding: 2px 5px;
-        border-radius: 3px;
-    }
-    .guide-corners {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-    }
-    .corner {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        border: 2px solid #ff0000;
-        background: transparent;
-    }
-    .corner-tl {
-        top: -2px;
-        left: -2px;
-        border-right: none;
-        border-bottom: none;
-    }
-    .corner-tr {
-        top: -2px;
-        right: -2px;
-        border-left: none;
-        border-bottom: none;
-    }
-    .corner-bl {
-        bottom: -2px;
-        left: -2px;
-        border-right: none;
-        border-top: none;
-    }
-    .corner-br {
-        bottom: -2px;
-        right: -2px;
-        border-left: none;
-        border-top: none;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.title("🎯 Detector de Colores: Rojo, Azul, Verde")
 
 with st.sidebar:
-    st.subheader("Detector Simple de Colores")
+    st.subheader("Instrucciones Rápidas")
     st.markdown("""
-    **🎯 Colores que detecta:**
+    **🎨 Colores detectados:**
     - 🔴 ROJO
     - 🔵 AZUL  
     - 🟢 VERDE
     
-    **📸 Instrucciones:**
-    1. **Coloca el objeto dentro del cuadro rojo** en la cámara
-    2. El cuadro te guiará en tiempo real
-    3. Solo esa área se analizará
-    4. Haz clic en **"Detectar Colores"**
+    **📸 Para usar:**
+    1. Coloca objeto en el **cuadro rojo**
+    2. Toma la foto
+    3. Haz clic en **Detectar Colores**
+    4. Solo el área del cuadro se analiza
     """)
 
 ke = st.text_input('Ingresa tu Clave de OpenAI', type="password")
@@ -140,107 +119,98 @@ uploaded_file = None
 cropped_image = None
 
 if image_source == "Cámara Web":
-    st.subheader("📸 Captura desde Cámara")
+    st.subheader("📷 Captura con Guía Integrada")
     
-    # Instructions
-    st.info("🎯 **Coloca el objeto dentro del cuadro rojo que verás en la cámara**")
+    # Crear una imagen de ejemplo con la guía para mostrar cómo se verá
+    st.info("🔴 **La cámara mostrará un cuadro rojo - coloca el objeto dentro de él**")
     
-    # Container for camera with overlay
-    st.markdown("""
-    <div class="camera-overlay">
-        <div class="camera-guide">
-            <div class="guide-corners">
-                <div class="corner corner-tl"></div>
-                <div class="corner corner-tr"></div>
-                <div class="corner corner-bl"></div>
-                <div class="corner corner-br"></div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Primero mostrar cómo se verá
+    example_img = Image.new('RGB', (400, 300), color='lightgray')
+    example_with_guide = add_guide_rectangle(example_img)
     
-    # Camera input - this will appear below the overlay
+    col_preview, col_instructions = st.columns([2, 1])
+    
+    with col_preview:
+        st.image(example_with_guide, caption="Así se verá la guía en tu cámara", use_container_width=True)
+    
+    with col_instructions:
+        st.markdown("""
+        **✅ Posición correcta:**
+        - Objeto completamente dentro
+        - Centrado en el cuadro
+        - Buena iluminación
+        
+        **❌ A evitar:**
+        - Objeto fuera del cuadro
+        - Muy lejos o muy cerca
+        - Sombras fuertes
+        """)
+    
+    # Ahora la cámara real - procesaremos la imagen después de capturarla
+    st.markdown("---")
+    st.subheader("🎥 Toma tu foto ahora")
+    
     captured_image = st.camera_input(
-        "Toma una foto del objeto - Asegúrate que esté dentro del cuadro rojo", 
-        key="camera_with_overlay"
+        "Haz clic aquí para activar la cámara y tomar foto", 
+        key="main_camera"
     )
     
     if captured_image is not None:
+        # Procesar la imagen: agregar guía y luego recortar
         original_image = Image.open(captured_image)
         
-        # Show preview of what will be analyzed
-        st.markdown("---")
-        st.subheader("📷 Vista Previa del Análisis")
+        # Primero mostrar cómo se capturó con la guía superpuesta
+        st.subheader("📸 Vista de lo capturado")
         
-        col1, col2 = st.columns(2)
+        # Crear versión con guía para mostrar al usuario
+        image_with_guide = add_guide_rectangle(original_image)
         
-        with col1:
-            st.markdown("**📸 Foto completa capturada:**")
-            st.image(original_image, caption="Así se vio en la cámara", use_container_width=True)
+        col_captured, col_analysis = st.columns(2)
         
-        with col2:
-            st.markdown("**✂️ Área que se analizará:**")
+        with col_captured:
+            st.image(image_with_guide, caption="Así capturaste la imagen", use_container_width=True)
+            st.markdown("**Área completa con guía visual**")
+        
+        with col_analysis:
+            # Crear la imagen recortada para análisis
             cropped_image = crop_to_guide_area(original_image)
-            st.image(cropped_image, caption="Solo esta parte se analiza (60% central)", use_container_width=True)
+            st.image(cropped_image, caption="Esta área se analizará", use_container_width=True)
+            st.markdown("**Solo esta parte se enviará para detección**")
         
-        # Convert cropped image for upload
+        # Convertir imagen recortada para upload
         image_bytes = pil_to_bytes(cropped_image)
         uploaded_file = type('obj', (object,), {
             'getvalue': lambda: image_bytes.getvalue(),
             'name': 'objeto_analizado.jpg'
         })
         
-        st.success("✅ ¡Imagen preparada! Ahora haz clic en 'Detectar Colores'")
+        st.success("🎯 ¡Perfecto! El objeto está listo para análisis. Haz clic en 'Detectar Colores'")
 
 else:
-    st.subheader("📁 Subir Imagen")
+    st.subheader("📁 Subir Imagen Existente")
     
-    uploaded_original = st.file_uploader("Sube una imagen del objeto", type=["jpg", "png", "jpeg"])
+    uploaded_original = st.file_uploader("Selecciona una imagen con el objeto", type=["jpg", "png", "jpeg"])
     
     if uploaded_original is not None:
         original_image = Image.open(uploaded_original)
         
-        # Show the image with guide overlay using PIL
+        # Procesar imagen subida: agregar guía y mostrar
         st.subheader("📷 Vista Previa con Guía")
         
-        # Create guide overlay for uploaded image
-        img_with_guide = original_image.copy()
-        draw = ImageDraw.Draw(img_with_guide)
+        image_with_guide = add_guide_rectangle(original_image)
+        cropped_image = crop_to_guide_area(original_image)
         
-        width, height = img_with_guide.size
-        rect_width = int(width * 0.6)
-        rect_height = int(height * 0.6)
-        x1 = (width - rect_width) // 2
-        y1 = (height - rect_height) // 2
-        x2 = x1 + rect_width
-        y2 = y1 + rect_height
+        col_guide, col_crop = st.columns(2)
         
-        # Draw red rectangle
-        draw.rectangle([x1, y1, x2, y2], outline="red", width=4)
+        with col_guide:
+            st.image(image_with_guide, caption="Imagen con área de detección", use_container_width=True)
+            st.markdown("**El cuadro rojo muestra el área de análisis**")
         
-        # Draw corners
-        corner_size = 15
-        draw.line([x1, y1, x1 + corner_size, y1], fill="red", width=3)
-        draw.line([x1, y1, x1, y1 + corner_size], fill="red", width=3)
-        draw.line([x2, y1, x2 - corner_size, y1], fill="red", width=3)
-        draw.line([x2, y1, x2, y1 + corner_size], fill="red", width=3)
-        draw.line([x1, y2, x1 + corner_size, y2], fill="red", width=3)
-        draw.line([x1, y2, x1, y2 - corner_size], fill="red", width=3)
-        draw.line([x2, y2, x2 - corner_size, y2], fill="red", width=3)
-        draw.line([x2, y2, x2, y2 - corner_size], fill="red", width=3)
+        with col_crop:
+            st.image(cropped_image, caption="Área que se analizará", use_container_width=True)
+            st.markdown("**Solo esta parte se procesará**")
         
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            st.markdown("**👀 Imagen con guía:**")
-            st.image(img_with_guide, caption="Área de detección marcada", use_container_width=True)
-        
-        with col4:
-            st.markdown("**✂️ Área que se analiza:**")
-            cropped_image = crop_to_guide_area(original_image)
-            st.image(cropped_image, caption="Esta parte se analizará", use_container_width=True)
-        
-        # Convert cropped image for upload
+        # Convertir imagen recortada para upload
         image_bytes = pil_to_bytes(cropped_image)
         uploaded_file = type('obj', (object,), {
             'getvalue': lambda: image_bytes.getvalue(),
@@ -248,18 +218,18 @@ else:
         })
 
 # Button to trigger the analysis
-analyze_button = st.button("🎨 Detectar Colores", type="primary", use_container_width=True)
+analyze_button = st.button("🔍 Detectar Colores", type="primary", use_container_width=True)
 
 # Check if an image has been uploaded and API key is available
 if uploaded_file is not None and api_key and analyze_button:
 
-    with st.spinner("🔍 Analizando colores..."):
+    with st.spinner("🎨 Analizando colores del objeto..."):
         # Encode the cropped image
         base64_image = encode_image(uploaded_file)
     
         # Simple prompt for basic color detection
         prompt_text = """
-        Analiza esta imagen y responde SOLO con un JSON que contenga:
+        Analiza ESTA imagen y responde SOLO con un JSON que contenga:
         
         {
             "rojo": true/false,
@@ -268,10 +238,10 @@ if uploaded_file is not None and api_key and analyze_button:
         }
         
         Reglas:
-        - "true" si el color está presente en el objeto
-        - "false" si el color NO está presente
-        - Analiza solo el objeto principal dentro del área visible
-        - Ignora fondos y elementos secundarios
+        - "true" si el color está presente en el objeto principal
+        - "false" si el color NO está presente  
+        - Analiza SOLO el objeto dentro del área visible
+        - IGNORA fondos y elementos secundarios
         - Responde EXCLUSIVAMENTE con el JSON, nada más
         """
     
@@ -299,7 +269,7 @@ if uploaded_file is not None and api_key and analyze_button:
             # Display the response
             if response.choices[0].message.content:
                 st.markdown("---")
-                st.subheader("🎯 Resultados de Detección")
+                st.subheader("📊 Resultados de la Detección")
                 
                 # Parse the JSON response
                 try:
@@ -309,69 +279,77 @@ if uploaded_file is not None and api_key and analyze_button:
                     result_text = result_text.replace('```json', '').replace('```', '').strip()
                     color_data = json.loads(result_text)
                     
-                    # Mostrar resultados con emojis y colores
-                    st.markdown("### 📊 Detección de Colores")
+                    # Mostrar resultados
+                    st.markdown("### 🎨 Colores Detectados en el Objeto")
+                    
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
+                        st.markdown("#### 🔴 Rojo")
                         if color_data.get("rojo", False):
-                            st.success("🔴 **ROJO: SÍ**")
-                            st.markdown("✅ Color rojo detectado")
+                            st.success("**✅ DETECTADO**")
+                            st.markdown("El color rojo está presente")
                         else:
-                            st.error("🔴 **ROJO: NO**")
-                            st.markdown("❌ No se detectó rojo")
+                            st.error("**❌ NO DETECTADO**")
+                            st.markdown("No se encontró rojo")
                     
                     with col2:
+                        st.markdown("#### 🔵 Azul")
                         if color_data.get("azul", False):
-                            st.success("🔵 **AZUL: SÍ**")
-                            st.markdown("✅ Color azul detectado")
+                            st.success("**✅ DETECTADO**")
+                            st.markdown("El color azul está presente")
                         else:
-                            st.error("🔵 **AZUL: NO**")
-                            st.markdown("❌ No se detectó azul")
+                            st.error("**❌ NO DETECTADO**")
+                            st.markdown("No se encontró azul")
                     
                     with col3:
+                        st.markdown("#### 🟢 Verde")
                         if color_data.get("verde", False):
-                            st.success("🟢 **VERDE: SÍ**")
-                            st.markdown("✅ Color verde detectado")
+                            st.success("**✅ DETECTADO**")
+                            st.markdown("El color verde está presente")
                         else:
-                            st.error("🟢 **VERDE: NO**")
-                            st.markdown("❌ No se detectó verde")
+                            st.error("**❌ NO DETECTADO**")
+                            st.markdown("No se encontró verde")
                             
-                    # Resumen
+                    # Resumen final
                     st.markdown("---")
                     colors_found = []
                     if color_data.get("rojo"): colors_found.append("🔴 Rojo")
-                    if color_data.get("azul"): colors_found.append("🔵 Azul")
+                    if color_data.get("azul"): colors_found.append("🔵 Azul") 
                     if color_data.get("verde"): colors_found.append("🟢 Verde")
                     
                     if colors_found:
-                        st.success(f"🎨 **Colores detectados:** {', '.join(colors_found)}")
+                        st.success(f"**🎯 RESULTADO:** Se detectaron: {', '.join(colors_found)}")
                     else:
-                        st.warning("❌ **No se detectaron** los colores rojo, azul o verde")
+                        st.warning("**📝 RESULTADO:** No se detectaron los colores rojo, azul o verde en el objeto")
                         
                 except json.JSONDecodeError:
-                    st.error("Error al procesar la respuesta. Respuesta recibida:")
+                    st.error("Error al procesar la respuesta del análisis.")
                     st.code(response.choices[0].message.content)
     
         except Exception as e:
-            st.error(f"❌ Ocurrió un error: {e}")
+            st.error(f"❌ Error en el análisis: {e}")
             st.info("Por favor verifica tu API key e intenta nuevamente")
             
 else:
     # Warnings for user action required
     if not uploaded_file and analyze_button:
-        st.warning("⚠️ Por favor captura o sube una imagen del objeto primero.")
+        st.warning("⚠️ Primero captura o sube una imagen del objeto.")
     if not api_key and analyze_button:
-        st.warning("🔑 Por favor ingresa tu API key de OpenAI.")
+        st.warning("🔑 Ingresa tu API key de OpenAI para continuar.")
 
-# Additional styling for better mobile experience
-st.markdown("""
-<style>
-    @media (max-width: 768px) {
-        .camera-guide::before {
-            font-size: 12px;
-            top: -30px;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
+# Final tips
+with st.expander("💡 Consejos para mejor detección"):
+    st.markdown("""
+    **🎯 Para mejores resultados:**
+    - **Posición:** Objeto centrado en el cuadro rojo
+    - **Tamaño:** Que ocupe al menos 50% del área del cuadro  
+    - **Iluminación:** Luz natural o artificial uniforme
+    - **Fondo:** Preferiblemente neutro (blanco, gris, negro)
+    - **Enfoque:** Imagen nítida y clara
+    
+    **🔍 Nota importante:**
+    - Solo el área dentro del **cuadro rojo** se analiza
+    - Todo lo fuera del cuadro se ignora
+    - El análisis es específico para **rojo, azul y verde**
+    """)
