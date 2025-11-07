@@ -28,45 +28,6 @@ def crop_to_guide_area(image):
     
     return cropped_image
 
-# Function to add guide rectangle to image (for display only)
-def add_guide_rectangle(image):
-    """Add a guide rectangle to show where to place the object"""
-    img = image.copy()
-    draw = ImageDraw.Draw(img)
-    
-    # Calculate rectangle dimensions (60% of image size, centered)
-    width, height = img.size
-    rect_width = int(width * 0.6)
-    rect_height = int(height * 0.6)
-    x1 = (width - rect_width) // 2
-    y1 = (height - rect_height) // 2
-    x2 = x1 + rect_width
-    y2 = y1 + rect_height
-    
-    # Draw rectangle
-    draw.rectangle([x1, y1, x2, y2], outline="red", width=4)
-    
-    # Add corner markers for better visibility
-    corner_size = 15
-    # Top-left
-    draw.line([x1, y1, x1 + corner_size, y1], fill="red", width=3)
-    draw.line([x1, y1, x1, y1 + corner_size], fill="red", width=3)
-    # Top-right
-    draw.line([x2, y1, x2 - corner_size, y1], fill="red", width=3)
-    draw.line([x2, y1, x2, y1 + corner_size], fill="red", width=3)
-    # Bottom-left
-    draw.line([x1, y2, x1 + corner_size, y2], fill="red", width=3)
-    draw.line([x1, y2, x1, y2 - corner_size], fill="red", width=3)
-    # Bottom-right
-    draw.line([x2, y2, x2 - corner_size, y2], fill="red", width=3)
-    draw.line([x2, y2, x2, y2 - corner_size], fill="red", width=3)
-    
-    # Add text
-    draw.text((x1 + 10, y1 - 30), "COLOCA EL OBJETO AQUÍ", fill="red", stroke_width=2, stroke_fill="white")
-    draw.text((width//2 - 80, y2 + 10), "Zona de detección", fill="red", stroke_width=2, stroke_fill="white")
-    
-    return img
-
 # Function to convert PIL image to bytes for upload
 def pil_to_bytes(pil_image):
     img_byte_arr = io.BytesIO()
@@ -79,6 +40,76 @@ st.set_page_config(page_title="Detector de Colores Básicos", layout="centered",
 # Streamlit page setup
 st.title("🔍 Detector de Colores: Rojo, Azul, Verde")
 
+# Custom CSS para superponer el cuadro guía en la cámara
+st.markdown("""
+<style>
+    .camera-overlay {
+        position: relative;
+        display: inline-block;
+    }
+    .camera-guide {
+        position: absolute;
+        top: 20%;
+        left: 20%;
+        width: 60%;
+        height: 60%;
+        border: 3px solid #ff0000;
+        background: transparent;
+        pointer-events: none;
+        z-index: 1000;
+    }
+    .camera-guide::before {
+        content: "COLOCA EL OBJETO AQUÍ";
+        position: absolute;
+        top: -35px;
+        left: 10px;
+        color: #ff0000;
+        font-weight: bold;
+        font-size: 14px;
+        background: white;
+        padding: 2px 5px;
+        border-radius: 3px;
+    }
+    .guide-corners {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+    .corner {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #ff0000;
+        background: transparent;
+    }
+    .corner-tl {
+        top: -2px;
+        left: -2px;
+        border-right: none;
+        border-bottom: none;
+    }
+    .corner-tr {
+        top: -2px;
+        right: -2px;
+        border-left: none;
+        border-bottom: none;
+    }
+    .corner-bl {
+        bottom: -2px;
+        left: -2px;
+        border-right: none;
+        border-top: none;
+    }
+    .corner-br {
+        bottom: -2px;
+        right: -2px;
+        border-left: none;
+        border-top: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
     st.subheader("Detector Simple de Colores")
     st.markdown("""
@@ -88,10 +119,10 @@ with st.sidebar:
     - 🟢 VERDE
     
     **📸 Instrucciones:**
-    1. Coloca el objeto dentro del **cuadro rojo**
-    2. Asegúrate que esté bien centrado
-    3. Haz clic en **"Detectar Colores"**
-    4. Solo el área dentro del cuadro se analiza
+    1. **Coloca el objeto dentro del cuadro rojo** en la cámara
+    2. El cuadro te guiará en tiempo real
+    3. Solo esa área se analizará
+    4. Haz clic en **"Detectar Colores"**
     """)
 
 ke = st.text_input('Ingresa tu Clave de OpenAI', type="password")
@@ -111,51 +142,46 @@ cropped_image = None
 if image_source == "Cámara Web":
     st.subheader("📸 Captura desde Cámara")
     
-    # Instructions with visual guide
+    # Instructions
     st.info("🎯 **Coloca el objeto dentro del cuadro rojo que verás en la cámara**")
     
-    # Create a custom camera input with guide overlay
-    col1, col2 = st.columns([2, 1])
+    # Container for camera with overlay
+    st.markdown("""
+    <div class="camera-overlay">
+        <div class="camera-guide">
+            <div class="guide-corners">
+                <div class="corner corner-tl"></div>
+                <div class="corner corner-tr"></div>
+                <div class="corner corner-bl"></div>
+                <div class="corner corner-br"></div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.markdown("### 📷 Cámara con Guía")
-        captured_image = st.camera_input(
-            "Toma una foto del objeto", 
-            key="camera_with_guide",
-            help="El cuadro rojo te muestra dónde colocar el objeto para mejor detección"
-        )
-    
-    with col2:
-        st.markdown("### 💡 Guía Visual")
-        # Create a sample guide image
-        guide_sample = Image.new('RGB', (200, 150), color='lightgray')
-        guide_with_overlay = add_guide_rectangle(guide_sample)
-        st.image(guide_with_overlay, caption="Así verás la guía en la cámara", use_container_width=True)
-        st.markdown("""
-        **Asegúrate de:**
-        - Objeto dentro del rojo ✅
-        - Buena iluminación 💡
-        - Enfoque claro 👁️
-        """)
+    # Camera input - this will appear below the overlay
+    captured_image = st.camera_input(
+        "Toma una foto del objeto - Asegúrate que esté dentro del cuadro rojo", 
+        key="camera_with_overlay"
+    )
     
     if captured_image is not None:
         original_image = Image.open(captured_image)
         
-        # Show what was captured with the guide overlay
+        # Show preview of what will be analyzed
         st.markdown("---")
-        st.subheader("📷 Foto Capturada")
+        st.subheader("📷 Vista Previa del Análisis")
         
-        col3, col4 = st.columns(2)
+        col1, col2 = st.columns(2)
         
-        with col3:
-            st.markdown("**👀 Con guía de posición:**")
-            guide_image = add_guide_rectangle(original_image)
-            st.image(guide_image, caption="Así capturaste la imagen", use_container_width=True)
+        with col1:
+            st.markdown("**📸 Foto completa capturada:**")
+            st.image(original_image, caption="Así se vio en la cámara", use_container_width=True)
         
-        with col4:
-            st.markdown("**✂️ Área que se analiza:**")
+        with col2:
+            st.markdown("**✂️ Área que se analizará:**")
             cropped_image = crop_to_guide_area(original_image)
-            st.image(cropped_image, caption="Esta parte se enviará para análisis", use_container_width=True)
+            st.image(cropped_image, caption="Solo esta parte se analiza (60% central)", use_container_width=True)
         
         # Convert cropped image for upload
         image_bytes = pil_to_bytes(cropped_image)
@@ -164,7 +190,7 @@ if image_source == "Cámara Web":
             'name': 'objeto_analizado.jpg'
         })
         
-        st.success("✅ ¡Imagen lista! Ahora haz clic en 'Detectar Colores'")
+        st.success("✅ ¡Imagen preparada! Ahora haz clic en 'Detectar Colores'")
 
 else:
     st.subheader("📁 Subir Imagen")
@@ -174,17 +200,42 @@ else:
     if uploaded_original is not None:
         original_image = Image.open(uploaded_original)
         
-        # Show the image with guide overlay
+        # Show the image with guide overlay using PIL
         st.subheader("📷 Vista Previa con Guía")
         
-        col5, col6 = st.columns(2)
+        # Create guide overlay for uploaded image
+        img_with_guide = original_image.copy()
+        draw = ImageDraw.Draw(img_with_guide)
         
-        with col5:
-            st.markdown("**👀 Imagen original con guía:**")
-            guide_image = add_guide_rectangle(original_image)
-            st.image(guide_image, caption="Área de detección marcada", use_container_width=True)
+        width, height = img_with_guide.size
+        rect_width = int(width * 0.6)
+        rect_height = int(height * 0.6)
+        x1 = (width - rect_width) // 2
+        y1 = (height - rect_height) // 2
+        x2 = x1 + rect_width
+        y2 = y1 + rect_height
         
-        with col6:
+        # Draw red rectangle
+        draw.rectangle([x1, y1, x2, y2], outline="red", width=4)
+        
+        # Draw corners
+        corner_size = 15
+        draw.line([x1, y1, x1 + corner_size, y1], fill="red", width=3)
+        draw.line([x1, y1, x1, y1 + corner_size], fill="red", width=3)
+        draw.line([x2, y1, x2 - corner_size, y1], fill="red", width=3)
+        draw.line([x2, y1, x2, y1 + corner_size], fill="red", width=3)
+        draw.line([x1, y2, x1 + corner_size, y2], fill="red", width=3)
+        draw.line([x1, y2, x1, y2 - corner_size], fill="red", width=3)
+        draw.line([x2, y2, x2 - corner_size, y2], fill="red", width=3)
+        draw.line([x2, y2, x2, y2 - corner_size], fill="red", width=3)
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            st.markdown("**👀 Imagen con guía:**")
+            st.image(img_with_guide, caption="Área de detección marcada", use_container_width=True)
+        
+        with col4:
             st.markdown("**✂️ Área que se analiza:**")
             cropped_image = crop_to_guide_area(original_image)
             st.image(cropped_image, caption="Esta parte se analizará", use_container_width=True)
@@ -313,24 +364,14 @@ else:
     if not api_key and analyze_button:
         st.warning("🔑 Por favor ingresa tu API key de OpenAI.")
 
-# Simple instructions
-with st.expander("📋 Guía Rápida"):
-    st.markdown("""
-    ### 🎯 Cómo usar la cámara:
-    1. **Verás un cuadro rojo** en la vista de la cámara
-    2. **Coloca tu objeto** completamente dentro del cuadro
-    3. **Asegúrate** de que esté bien iluminado
-    4. **Toma la foto** cuando esté bien posicionado
-    
-    ### 🔍 Qué hace la app:
-    - Analiza **solo el área dentro del cuadro rojo**
-    - Detecta si hay colores **rojo, azul o verde**
-    - Muestra resultados **SÍ/NO** para cada color
-    - **Ignora** todo fuera del cuadro rojo
-    
-    ### 💡 Consejos:
-    - Usa **fondo simple** para mejor detección
-    - **Buena luz** natural o artificial
-    - Objeto **bien centrado** en el cuadro
-    - **Múltiples intentos** si es necesario
-    """)
+# Additional styling for better mobile experience
+st.markdown("""
+<style>
+    @media (max-width: 768px) {
+        .camera-guide::before {
+            font-size: 12px;
+            top: -30px;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
